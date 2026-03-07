@@ -56,9 +56,104 @@ export default function UploadPage() {
       return await file.text()
     }
     
-    // For other files, simulate text extraction
-    // In a real app, you'd use libraries like pdf.js or mammoth.js
-    return `[Extracted content from ${file.name}]\n\nThis document contains important information that will be analyzed by our multi-agent AI system. The grammar agent will check for grammatical errors, the research quality agent will evaluate the structure and clarity, and the improvement agent will suggest enhancements.\n\nSample content for analysis:\nThe research methodology employed in this study demonstrates a comprehensive approach to data collection and analysis. However, there are several areas where improvements could be made to enhance the overall quality of the research.\n\nKey findings include:\n1. Data analysis techniques were applied consistently\n2. The literature review covers relevant sources\n3. Conclusions are well-supported by evidence\n\nRecommendations for future research should consider expanding the scope of the study and incorporating additional data sources.`
+    // For DOCX files, extract text from the XML content
+    if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      try {
+        const arrayBuffer = await file.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+        
+        // DOCX is a zip file, try to find text content patterns
+        const textDecoder = new TextDecoder('utf-8', { fatal: false })
+        const rawText = textDecoder.decode(uint8Array)
+        
+        // Extract text between XML tags (simplified extraction)
+        const textMatches = rawText.match(/<w:t[^>]*>([^<]*)<\/w:t>/g)
+        if (textMatches && textMatches.length > 0) {
+          const extractedText = textMatches
+            .map(match => match.replace(/<[^>]+>/g, ''))
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+          
+          if (extractedText.length > 50) {
+            return `[Document: ${file.name}]\n\n${extractedText}`
+          }
+        }
+        
+        // Fallback: extract any readable text from the binary
+        const readableText = rawText.replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+        
+        if (readableText.length > 100) {
+          return `[Document: ${file.name}]\n\n${readableText.substring(0, 5000)}`
+        }
+      } catch (e) {
+        console.error("Error extracting DOCX text:", e)
+      }
+    }
+    
+    // For PDF files, extract readable text
+    if (file.type === "application/pdf") {
+      try {
+        const arrayBuffer = await file.arrayBuffer()
+        const uint8Array = new Uint8Array(arrayBuffer)
+        const textDecoder = new TextDecoder('utf-8', { fatal: false })
+        const rawContent = textDecoder.decode(uint8Array)
+        
+        // Extract text between parentheses (PDF text streams) and BT/ET blocks
+        const textParts: string[] = []
+        
+        // Method 1: Extract text from text objects (Tj and TJ operators)
+        const tjMatches = rawContent.match(/\(([^)]+)\)\s*Tj/g)
+        if (tjMatches) {
+          tjMatches.forEach(match => {
+            const text = match.replace(/\(|\)\s*Tj/g, '')
+            if (text.length > 2) textParts.push(text)
+          })
+        }
+        
+        // Method 2: Extract readable strings
+        const readableMatches = rawContent.match(/[A-Za-z][A-Za-z0-9\s.,;:!?'-]{10,}/g)
+        if (readableMatches) {
+          textParts.push(...readableMatches)
+        }
+        
+        if (textParts.length > 0) {
+          const uniqueText = [...new Set(textParts)].join(' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+          
+          if (uniqueText.length > 50) {
+            return `[PDF Document: ${file.name}]\n\n${uniqueText.substring(0, 5000)}`
+          }
+        }
+        
+        // Fallback for PDFs
+        return `[PDF Document: ${file.name}]\n\nPDF content detected but text extraction limited. File size: ${file.size} bytes. The document appears to contain ${Math.ceil(file.size / 1000)} KB of data. Please ensure the PDF contains selectable text rather than scanned images for better analysis results.`
+      } catch (e) {
+        console.error("Error extracting PDF text:", e)
+      }
+    }
+    
+    // For images, create a description based on file metadata
+    if (file.type.startsWith("image/")) {
+      const imageInfo = `[Image: ${file.name}]\n\nImage file detected (${file.type}). File size: ${(file.size / 1024).toFixed(2)} KB.\n\nNote: For text analysis, please upload text documents (PDF, DOCX, TXT). Image-based documents would require OCR processing which is not currently supported in this version.\n\nFile metadata:\n- Name: ${file.name}\n- Type: ${file.type}\n- Size: ${file.size} bytes\n- Last modified: ${new Date(file.lastModified).toISOString()}`
+      
+      return imageInfo
+    }
+    
+    // Generic fallback - read as much text as possible
+    try {
+      const text = await file.text()
+      if (text && text.length > 0) {
+        return `[Document: ${file.name}]\n\n${text.substring(0, 5000)}`
+      }
+    } catch {
+      // File can't be read as text
+    }
+    
+    return `[Document: ${file.name}]\n\nUnable to extract text content from this file type (${file.type}). File size: ${file.size} bytes.`
   }
 
   const processFile = async (uploadedFile: UploadedFile) => {
