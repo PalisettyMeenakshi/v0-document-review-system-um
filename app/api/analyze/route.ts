@@ -27,10 +27,13 @@ interface Improvement {
 interface AnalysisResult {
   grammarIssues: GrammarIssue[]
   grammarScore: number
+  grammarStatus: string
   researchReview: ResearchReview[]
   researchScore: number
+  researchStatus: string
   improvements: Improvement[]
   improvementScore: number
+  improvementStatus: string
   overallScore: number
   summary: string
 }
@@ -68,15 +71,26 @@ function removeIgnoredSections(text: string): string {
   return cleanedText.trim()
 }
 
-// Grammar Agent - Only detects meaningful issues
-// Does NOT flag: academic writing style, long sentences, passive voice, citations, references, technical terminology
-function analyzeGrammar(text: string, instructions: string): { issues: GrammarIssue[], score: number } {
+/*
+GRAMMAR AGENT
+Check only for:
+• spelling mistakes
+• incorrect punctuation
+• incomplete sentences
+• clear grammatical errors
+
+Do NOT mark:
+• academic writing style
+• long sentences
+• passive voice
+• technical terminology
+• citations
+*/
+function analyzeGrammar(text: string): { issues: GrammarIssue[], status: string } {
   const issues: GrammarIssue[] = []
-  
-  // Remove sections we should ignore
   const cleanedText = removeIgnoredSections(text)
   
-  // Check for definite spelling errors
+  // Check for definite spelling errors only
   const spellingErrors = [
     { pattern: /\bcould of\b/gi, fix: "could have", explain: "Grammar error: 'could of' should be 'could have'" },
     { pattern: /\bshould of\b/gi, fix: "should have", explain: "Grammar error: 'should of' should be 'should have'" },
@@ -84,16 +98,18 @@ function analyzeGrammar(text: string, instructions: string): { issues: GrammarIs
     { pattern: /\balot\b/gi, fix: "a lot", explain: "Spelling error: 'alot' should be 'a lot'" },
     { pattern: /\bteh\b/gi, fix: "the", explain: "Typo: 'teh' should be 'the'" },
     { pattern: /\badn\b/gi, fix: "and", explain: "Typo: 'adn' should be 'and'" },
-    { pattern: /\bthier\b/gi, fix: "their", explain: "Spelling error" },
-    { pattern: /\brecieve\b/gi, fix: "receive", explain: "Spelling error: i before e except after c" },
-    { pattern: /\bseperate\b/gi, fix: "separate", explain: "Spelling error" },
-    { pattern: /\boccured\b/gi, fix: "occurred", explain: "Spelling error: double 'r'" },
-    { pattern: /\bdefinately\b/gi, fix: "definitely", explain: "Spelling error" },
-    { pattern: /\buntill\b/gi, fix: "until", explain: "Spelling error: single 'l'" },
-    { pattern: /\bwich\b/gi, fix: "which", explain: "Spelling error" },
-    { pattern: /\bbelive\b/gi, fix: "believe", explain: "Spelling error" },
-    { pattern: /\bneccessary\b/gi, fix: "necessary", explain: "Spelling error" },
-    { pattern: /\baccommodate\b/gi, fix: "accommodate", explain: "Spelling check" },
+    { pattern: /\bthier\b/gi, fix: "their", explain: "Spelling error: 'thier' should be 'their'" },
+    { pattern: /\brecieve\b/gi, fix: "receive", explain: "Spelling error: 'recieve' should be 'receive'" },
+    { pattern: /\bseperate\b/gi, fix: "separate", explain: "Spelling error: 'seperate' should be 'separate'" },
+    { pattern: /\boccured\b/gi, fix: "occurred", explain: "Spelling error: 'occured' should be 'occurred'" },
+    { pattern: /\bdefinately\b/gi, fix: "definitely", explain: "Spelling error: 'definately' should be 'definitely'" },
+    { pattern: /\buntill\b/gi, fix: "until", explain: "Spelling error: 'untill' should be 'until'" },
+    { pattern: /\bwich\b/gi, fix: "which", explain: "Spelling error: 'wich' should be 'which'" },
+    { pattern: /\bbelive\b/gi, fix: "believe", explain: "Spelling error: 'belive' should be 'believe'" },
+    { pattern: /\bneccessary\b/gi, fix: "necessary", explain: "Spelling error: 'neccessary' should be 'necessary'" },
+    { pattern: /\bacccomodate\b/gi, fix: "accommodate", explain: "Spelling error" },
+    { pattern: /\bbeggining\b/gi, fix: "beginning", explain: "Spelling error: 'beggining' should be 'beginning'" },
+    { pattern: /\benviroment\b/gi, fix: "environment", explain: "Spelling error: 'enviroment' should be 'environment'" },
   ]
   
   for (const check of spellingErrors) {
@@ -108,34 +124,11 @@ function analyzeGrammar(text: string, instructions: string): { issues: GrammarIs
     }
   }
   
-  // Check for missing punctuation at end of clear sentences
-  const sentences = getSentences(cleanedText)
-  for (const sentence of sentences) {
-    // Check for sentences that don't end with punctuation but should
-    const lastChar = sentence.trim().slice(-1)
-    if (sentence.length > 20 && !/[.!?:;,]$/.test(lastChar)) {
-      // Make sure it's not a heading or list item
-      if (!/^[A-Z\d]+\.?\s/.test(sentence) && !/^\d+\./.test(sentence)) {
-        // Only flag if it looks like a complete sentence missing punctuation
-        const hasSubjectVerb = /\b(is|are|was|were|have|has|had|will|would|could|should|can|may|might|must)\b/i.test(sentence)
-        if (hasSubjectVerb && issues.length < 3) {
-          issues.push({
-            original: sentence.substring(0, 50) + (sentence.length > 50 ? "..." : ""),
-            suggestion: "Add appropriate punctuation",
-            explanation: "Missing punctuation at end of sentence",
-            severity: "low"
-          })
-        }
-      }
-    }
-  }
-  
   // Check for repeated consecutive words (the the, is is, etc.)
   const repeatedWords = cleanedText.match(/\b(\w+)\s+\1\b/gi)
   if (repeatedWords && repeatedWords.length > 0) {
-    // Filter out intentional repetitions
-    const unintentional = repeatedWords.filter(r => !/^(that that|had had|is is|was was)$/i.test(r))
-    if (unintentional.length > 0 && issues.length < 3) {
+    const unintentional = repeatedWords.filter(r => !/^(that that|had had)$/i.test(r))
+    if (unintentional.length > 0) {
       issues.push({
         original: unintentional[0],
         suggestion: unintentional[0].split(/\s+/)[0],
@@ -145,10 +138,11 @@ function analyzeGrammar(text: string, instructions: string): { issues: GrammarIs
     }
   }
   
-  // Check for unclear sentences (very short fragments that look incomplete)
+  // Check for incomplete sentences (very short fragments starting with article but no verb)
+  const sentences = getSentences(cleanedText)
   for (const sentence of sentences) {
-    const wordCount = getWords(sentence).length
-    if (wordCount >= 2 && wordCount <= 4) {
+    const words = getWords(sentence)
+    if (words.length >= 2 && words.length <= 3) {
       const startsWithArticle = /^(The|A|An|This|That)\s/i.test(sentence)
       const hasNoVerb = !/\b(is|are|was|were|be|been|have|has|had|do|does|did|will|would|could|should|can|may|might|must|show|include|provide|present|describe|discuss|analyze|examine|demonstrate|indicate|suggest|reveal|explain)\b/i.test(sentence)
       const notHeading = !/^[A-Z][A-Z\s]+$/.test(sentence) && !/^\d+\./.test(sentence)
@@ -156,71 +150,113 @@ function analyzeGrammar(text: string, instructions: string): { issues: GrammarIs
       if (startsWithArticle && hasNoVerb && notHeading && issues.length < 3) {
         issues.push({
           original: sentence,
-          suggestion: "Complete this sentence or clarify meaning",
-          explanation: "Unclear or incomplete sentence",
-          severity: "low"
+          suggestion: "Complete this sentence",
+          explanation: "Incomplete sentence detected",
+          severity: "medium"
         })
       }
     }
   }
   
-  // LIMIT: Maximum 3 grammar issues
-  const limitedIssues = issues.slice(0, 3)
+  // Return status based on issues found
+  const status = issues.length === 0 ? "Perfect" : `${issues.length} issue(s) found`
   
-  return { issues: limitedIssues, score: 100 }
+  return { issues: issues.slice(0, 3), status }
 }
 
-// Research Quality Agent - Evaluates structure and clarity
-function analyzeResearchQuality(text: string, instructions: string): { review: ResearchReview[], score: number } {
+/*
+RESEARCH QUALITY AGENT
+Evaluate:
+• logical flow
+• clarity of explanation
+• structured paragraphs
+• coherence between sections
+
+Do not penalize:
+• references
+• citations
+• technical terms
+*/
+function analyzeResearchQuality(text: string): { review: ResearchReview[], status: string } {
   const review: ResearchReview[] = []
   const cleanedText = removeIgnoredSections(text)
   const textLower = cleanedText.toLowerCase()
   const sentences = getSentences(cleanedText)
-  const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0)
+  const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 50)
   
-  // Check for clear structure indicators
-  const hasIntro = textLower.includes("introduction") || textLower.includes("abstract")
-  const hasMethodology = textLower.includes("method") || textLower.includes("approach") || textLower.includes("procedure")
-  const hasResults = textLower.includes("result") || textLower.includes("finding") || textLower.includes("outcome")
+  // Check for structure indicators
+  const hasIntro = textLower.includes("introduction") || textLower.includes("abstract") || textLower.includes("background")
+  const hasMethodology = textLower.includes("method") || textLower.includes("approach") || textLower.includes("procedure") || textLower.includes("materials")
+  const hasResults = textLower.includes("result") || textLower.includes("finding") || textLower.includes("outcome") || textLower.includes("analysis")
   const hasConclusion = textLower.includes("conclusion") || textLower.includes("summary") || textLower.includes("discussion")
   
   const structureScore = [hasIntro, hasMethodology, hasResults, hasConclusion].filter(Boolean).length
   
+  // Evaluate logical flow - check for transition words
+  const transitionWords = ["however", "therefore", "furthermore", "moreover", "consequently", "thus", "hence", "additionally", "similarly", "in contrast", "as a result", "for example", "specifically"]
+  const hasTransitions = transitionWords.some(t => textLower.includes(t))
+  
+  // Evaluate clarity - check sentence variety and paragraph structure
+  const avgSentenceLength = sentences.length > 0 ? sentences.reduce((sum, s) => sum + getWords(s).length, 0) / sentences.length : 0
+  const hasGoodSentenceVariety = avgSentenceLength >= 10 && avgSentenceLength <= 30
+  const hasMultipleParagraphs = paragraphs.length >= 3
+  
+  // Determine status and feedback
+  let status: string
   let feedback: string
-  if (structureScore >= 3) {
-    feedback = "Document has clear and logical structure with well-defined sections."
-  } else if (structureScore >= 2) {
-    feedback = "Document structure is adequate. Consider adding clearer section headings."
-  } else if (paragraphs.length >= 3 && sentences.length >= 10) {
-    feedback = "Document has reasonable organization but could benefit from clearer section markers."
+  let score: number
+  
+  if (structureScore >= 3 && hasTransitions && hasMultipleParagraphs) {
+    status = "Excellent"
+    feedback = "Strong and well structured. The document demonstrates clear logical flow with well-organized sections and coherent paragraphs."
+    score = 100
+  } else if (structureScore >= 2 && hasMultipleParagraphs) {
+    status = "Strong"
+    feedback = "Well structured document with clear organization and logical flow between sections."
+    score = 95
+  } else if (structureScore >= 1 || hasMultipleParagraphs) {
+    status = "Adequate"
+    feedback = "Document structure is adequate with reasonable organization."
+    score = 85
   } else {
+    status = "Needs Improvement"
     feedback = "Consider organizing content into clearer sections for improved readability."
+    score = 75
   }
   
   review.push({
-    aspect: "Research Structure",
-    score: structureScore >= 2 ? 95 : 85,
+    aspect: "Overall Structure",
+    score,
     feedback
   })
   
-  return { review, score: structureScore >= 2 ? 95 : 85 }
+  return { review, status }
 }
 
-// Improvement Agent - Suggests minor stylistic improvements (not errors)
-function suggestImprovements(text: string, instructions: string): { improvements: Improvement[], score: number } {
+/*
+IMPROVEMENTS AGENT
+Suggest improvements only if:
+• a sentence is unclear
+• wording is repetitive
+• the meaning is confusing
+
+If the document is already clear and well written, state:
+"No improvements required."
+*/
+function suggestImprovements(text: string): { improvements: Improvement[], status: string } {
   const improvements: Improvement[] = []
   const cleanedText = removeIgnoredSections(text)
-  const textLower = cleanedText.toLowerCase()
+  const sentences = getSentences(cleanedText)
   
-  // Only flag informal language that clearly needs improvement
+  // Only flag clearly informal language
   const informalPatterns = [
-    { find: /\bgonna\b/i, replace: "going to", reason: "Consider more formal phrasing" },
-    { find: /\bwanna\b/i, replace: "want to", reason: "Consider more formal phrasing" },
-    { find: /\bgotta\b/i, replace: "have to", reason: "Consider more formal phrasing" },
-    { find: /\bkinda\b/i, replace: "somewhat", reason: "Consider more formal phrasing" },
-    { find: /\bsorta\b/i, replace: "somewhat", reason: "Consider more formal phrasing" },
-    { find: /\blots of\b/i, replace: "many/numerous", reason: "Consider more precise language" },
-    { find: /\ba lot of\b/i, replace: "numerous/significant", reason: "Suggestion: more academic phrasing" },
+    { find: /\bgonna\b/i, replace: "going to", reason: "Informal language - use formal phrasing" },
+    { find: /\bwanna\b/i, replace: "want to", reason: "Informal language - use formal phrasing" },
+    { find: /\bgotta\b/i, replace: "have to", reason: "Informal language - use formal phrasing" },
+    { find: /\bkinda\b/i, replace: "somewhat", reason: "Informal language - use formal phrasing" },
+    { find: /\bsorta\b/i, replace: "somewhat", reason: "Informal language - use formal phrasing" },
+    { find: /\bstuff\b/i, replace: "materials/elements", reason: "Vague language - be more specific" },
+    { find: /\bthings\b/i, replace: "aspects/elements", reason: "Vague language - be more specific" },
   ]
   
   for (const pattern of informalPatterns) {
@@ -234,71 +270,87 @@ function suggestImprovements(text: string, instructions: string): { improvements
     }
   }
   
-  // Check for very repetitive sentence starters (only if 4+ occurrences)
-  const sentenceStarters = getSentences(cleanedText).map(s => {
+  // Check for very repetitive sentence starters (only if 5+ occurrences)
+  const sentenceStarters = sentences.map(s => {
     const words = s.trim().split(/\s+/)
     return words.slice(0, 2).join(' ').toLowerCase()
   })
   
   const starterCounts: Record<string, number> = {}
   for (const starter of sentenceStarters) {
-    starterCounts[starter] = (starterCounts[starter] || 0) + 1
+    if (starter.length > 3) {
+      starterCounts[starter] = (starterCounts[starter] || 0) + 1
+    }
   }
   
   for (const [starter, count] of Object.entries(starterCounts)) {
-    if (count >= 4 && improvements.length < 2) {
+    if (count >= 5 && improvements.length < 2) {
       improvements.push({
-        original: `"${starter}..." used ${count} times`,
-        improved: "Vary sentence beginnings",
-        reason: "Suggestion: varying sentence structure improves readability"
+        original: `"${starter}..." appears ${count} times`,
+        improved: "Vary sentence beginnings for better readability",
+        reason: "Repetitive sentence structure"
       })
       break
     }
   }
   
-  // LIMIT: Maximum 2 improvement suggestions
-  const limitedImprovements = improvements.slice(0, 2)
+  // Return status based on improvements needed
+  const status = improvements.length === 0 ? "None required" : `${improvements.length} suggestion(s)`
   
-  return { improvements: limitedImprovements, score: 100 }
+  return { improvements: improvements.slice(0, 2), status }
 }
 
-// Calculate overall score based on scoring rules
+/*
+SCORING RULE
+
+Only give 100 when ALL three conditions are satisfied:
+Grammar → No issues  
+Research Quality → Strong and well structured  
+Improvements → No improvements required  
+
+If any of the three categories contains issues, reduce the score:
+Minor issues → 90–99  
+Moderate issues → 75–89  
+Major issues → below 75
+*/
 function calculateOverallScore(
-  grammarIssues: GrammarIssue[],
-  improvements: Improvement[]
+  grammarStatus: string,
+  researchStatus: string,
+  improvementStatus: string
 ): number {
-  const totalIssues = grammarIssues.length
-  const hasSuggestions = improvements.length > 0
+  const grammarPerfect = grammarStatus === "Perfect"
+  const researchExcellent = researchStatus === "Excellent" || researchStatus === "Strong"
+  const noImprovements = improvementStatus === "None required"
   
-  // Scoring rules:
-  // No issues → 98-100
-  // Only minor mistakes → 90-97
-  // Moderate issues → 75-89
-  // Major grammar/structural problems → below 75
-  
-  if (totalIssues === 0 && !hasSuggestions) {
-    // No issues found
-    return 98 + Math.floor(Math.random() * 3) // 98-100
+  // Perfect score: ALL three conditions satisfied
+  if (grammarPerfect && researchExcellent && noImprovements) {
+    return 100
   }
   
-  if (totalIssues <= 1 && improvements.length <= 1) {
-    // Only minor mistakes
-    return 90 + Math.floor(Math.random() * 8) // 90-97
+  // Count how many categories have issues
+  let issueCount = 0
+  if (!grammarPerfect) issueCount++
+  if (!researchExcellent) issueCount++
+  if (!noImprovements) issueCount++
+  
+  // Minor issues (1 category) → 90-99
+  if (issueCount === 1) {
+    return 90 + Math.floor(Math.random() * 10)
   }
   
-  if (totalIssues <= 3) {
-    // Moderate issues
-    return 75 + Math.floor(Math.random() * 15) // 75-89
+  // Moderate issues (2 categories) → 75-89
+  if (issueCount === 2) {
+    return 75 + Math.floor(Math.random() * 15)
   }
   
-  // Major problems (shouldn't happen with our limits, but just in case)
-  return 60 + Math.floor(Math.random() * 15) // 60-74
+  // Major issues (all 3 categories) → below 75
+  return 60 + Math.floor(Math.random() * 15)
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: AnalysisRequest = await request.json()
-    const { documentText, mentorInstructions = "" } = body
+    const { documentText } = body
 
     if (!documentText || documentText.trim().length === 0) {
       return NextResponse.json(
@@ -307,43 +359,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Simulate processing delay for realistic feel
+    // Simulate processing delay
     await new Promise(resolve => setTimeout(resolve, 1500))
 
     // Run all three agents
-    const grammarAnalysis = analyzeGrammar(documentText, mentorInstructions)
-    const researchAnalysis = analyzeResearchQuality(documentText, mentorInstructions)
-    const improvementAnalysis = suggestImprovements(documentText, mentorInstructions)
+    const grammarAnalysis = analyzeGrammar(documentText)
+    const researchAnalysis = analyzeResearchQuality(documentText)
+    const improvementAnalysis = suggestImprovements(documentText)
 
-    // Calculate overall score
+    // Calculate overall score based on all three categories
     const overallScore = calculateOverallScore(
-      grammarAnalysis.issues,
-      improvementAnalysis.improvements
+      grammarAnalysis.status,
+      researchAnalysis.review[0]?.feedback.includes("Strong") || researchAnalysis.review[0]?.feedback.includes("Excellent") ? "Excellent" : researchAnalysis.status,
+      improvementAnalysis.status
     )
 
-    // Generate summary in required format
-    const wordCount = getWords(documentText).length
-    const grammarText = grammarAnalysis.issues.length === 0 
-      ? "None" 
-      : grammarAnalysis.issues.map(i => `- ${i.original}: ${i.explanation}`).join('\n')
+    // Generate summary in required output format
+    const grammarText = grammarAnalysis.status === "Perfect" 
+      ? "Perfect" 
+      : grammarAnalysis.issues.map(i => `• ${i.explanation}`).join('\n')
     
-    const structureText = researchAnalysis.review.length > 0 
-      ? researchAnalysis.review[0].feedback 
-      : "Structure appears adequate"
+    const researchText = researchAnalysis.review[0]?.feedback || "Structure appears adequate"
     
-    const improvementText = improvementAnalysis.improvements.length === 0
-      ? "None"
-      : improvementAnalysis.improvements.map(i => `- ${i.reason}`).join('\n')
+    const improvementText = improvementAnalysis.status === "None required"
+      ? "None required"
+      : improvementAnalysis.improvements.map(i => `• ${i.reason}`).join('\n')
 
-    const summary = `Grammar Issues:\n${grammarText}\n\nResearch Structure:\n${structureText}\n\nImprovement Suggestions:\n${improvementText}\n\nOverall Score: ${overallScore}\n\n(Document: ${wordCount} words analyzed)`
+    const summary = `Grammar:\n${grammarText}\n\nResearch Quality:\n${researchText}\n\nImprovements:\n${improvementText}\n\nScore:\n${overallScore}`
 
     const result: AnalysisResult = {
       grammarIssues: grammarAnalysis.issues,
-      grammarScore: grammarAnalysis.issues.length === 0 ? 100 : Math.max(85, 100 - grammarAnalysis.issues.length * 5),
+      grammarScore: grammarAnalysis.status === "Perfect" ? 100 : Math.max(85, 100 - grammarAnalysis.issues.length * 5),
+      grammarStatus: grammarAnalysis.status,
       researchReview: researchAnalysis.review,
-      researchScore: researchAnalysis.score,
+      researchScore: researchAnalysis.review[0]?.score || 85,
+      researchStatus: researchAnalysis.status,
       improvements: improvementAnalysis.improvements,
-      improvementScore: improvementAnalysis.improvements.length === 0 ? 100 : 90,
+      improvementScore: improvementAnalysis.status === "None required" ? 100 : 90,
+      improvementStatus: improvementAnalysis.status,
       overallScore,
       summary
     }

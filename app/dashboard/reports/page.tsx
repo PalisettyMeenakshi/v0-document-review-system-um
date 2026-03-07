@@ -42,10 +42,13 @@ interface Improvement {
 interface AnalysisResult {
   grammarIssues: GrammarIssue[]
   grammarScore: number
+  grammarStatus: string
   researchReview: ResearchReview[]
   researchScore: number
+  researchStatus: string
   improvements: Improvement[]
   improvementScore: number
+  improvementStatus: string
   overallScore: number
   summary: string
 }
@@ -422,34 +425,41 @@ ${report.analysis.improvements.map(i =>
                 </Card>
               </div>
 
-              {/* Grammar Issues */}
+              {/* Grammar */}
               <Card className="bg-card border-border">
                 <CardHeader>
                   <CardTitle className="text-card-foreground flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-accent" />
-                    Grammar Issues
+                    Grammar
                   </CardTitle>
                   <CardDescription>
-                    {selectedReport.analysis.grammarIssues.length} issue{selectedReport.analysis.grammarIssues.length !== 1 ? "s" : ""} detected
+                    {selectedReport.analysis.grammarStatus || (selectedReport.analysis.grammarIssues.length === 0 ? "Perfect" : `${selectedReport.analysis.grammarIssues.length} issue(s) found`)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {selectedReport.analysis.grammarIssues.map((issue, idx) => (
-                      <div key={idx} className="p-4 bg-secondary/50 rounded-lg">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">{issue.original}</p>
-                            <p className="text-sm text-accent mt-1">{issue.suggestion}</p>
-                            <p className="text-xs text-muted-foreground mt-2">{issue.explanation}</p>
+                  {selectedReport.analysis.grammarIssues.length === 0 ? (
+                    <div className="flex items-center gap-3 p-4 bg-accent/10 rounded-lg">
+                      <CheckCircle2 className="h-5 w-5 text-accent" />
+                      <p className="text-sm font-medium text-accent">Perfect</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedReport.analysis.grammarIssues.map((issue, idx) => (
+                        <div key={idx} className="p-4 bg-secondary/50 rounded-lg">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-foreground">{issue.original}</p>
+                              <p className="text-sm text-accent mt-1">{issue.suggestion}</p>
+                              <p className="text-xs text-muted-foreground mt-2">{issue.explanation}</p>
+                            </div>
+                            <Badge className={getSeverityColor(issue.severity)}>
+                              {issue.severity}
+                            </Badge>
                           </div>
-                          <Badge className={getSeverityColor(issue.severity)}>
-                            {issue.severity}
-                          </Badge>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -458,58 +468,62 @@ ${report.analysis.improvements.map(i =>
                 <CardHeader>
                   <CardTitle className="text-card-foreground flex items-center gap-2">
                     <BookOpen className="h-5 w-5 text-accent" />
-                    Research Quality Review
+                    Research Quality
                   </CardTitle>
+                  <CardDescription>
+                    {selectedReport.analysis.researchStatus || "Evaluated"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     {selectedReport.analysis.researchReview.map((review, idx) => (
-                      <div key={idx} className="flex items-start gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-sm font-medium text-foreground">{review.aspect}</p>
-                            <span className={cn("font-mono text-sm", getScoreColor(review.score))}>
-                              {review.score}%
-                            </span>
-                          </div>
-                          <Progress value={review.score} className="h-1.5 mb-2" />
-                          <p className="text-xs text-muted-foreground">{review.feedback}</p>
-                        </div>
+                      <div key={idx} className="p-4 bg-secondary/50 rounded-lg">
+                        <p className="text-sm text-foreground">{review.feedback}</p>
                       </div>
                     ))}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Suggested Improvements */}
+              {/* Improvements */}
               <Card className="bg-card border-border">
                 <CardHeader>
                   <CardTitle className="text-card-foreground flex items-center gap-2">
                     <Lightbulb className="h-5 w-5 text-accent" />
-                    Suggested Improvements
+                    Improvements
                   </CardTitle>
+                  <CardDescription>
+                    {selectedReport.analysis.improvementStatus || (selectedReport.analysis.improvements.length === 0 ? "None required" : `${selectedReport.analysis.improvements.length} suggestion(s)`)}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {selectedReport.analysis.improvements.map((imp, idx) => (
-                      <div key={idx} className="p-4 bg-secondary/50 rounded-lg">
-                        <div className="flex items-start gap-3">
-                          <CheckCircle2 className="h-5 w-5 text-accent shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-muted-foreground">
-                              <span className="line-through">{imp.original}</span>
-                            </p>
-                            <p className="text-sm font-medium text-accent mt-1">
-                              {imp.improved}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-2">
-                              {imp.reason}
-                            </p>
+                  {selectedReport.analysis.improvements.length === 0 ? (
+                    <div className="flex items-center gap-3 p-4 bg-accent/10 rounded-lg">
+                      <CheckCircle2 className="h-5 w-5 text-accent" />
+                      <p className="text-sm font-medium text-accent">None required</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {selectedReport.analysis.improvements.map((imp, idx) => (
+                        <div key={idx} className="p-4 bg-secondary/50 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <Lightbulb className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm text-muted-foreground">
+                                <span className="line-through">{imp.original}</span>
+                              </p>
+                              <p className="text-sm font-medium text-accent mt-1">
+                                {imp.improved}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                {imp.reason}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
